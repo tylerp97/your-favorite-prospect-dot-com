@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+:root {
+  --color-page-bg: #F0EDE8;
+  --color-card-bg: #FDFCFA;
+  --color-cardinals-red: #C41E3A;
+  --color-border: #E2E0DB;
+  --color-stat-box: #F5F3EF;
+  --color-trend-up-bg: #D6F0D6;
+  --color-trend-up-text: #1E6B1E;
+  --color-trend-down-bg: #FADADD;
+  --color-trend-down-text: #8B1C2B;
+}
+
+body {
+  background-color: var(--color-page-bg);
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-serif {
+  font-family: 'Playfair Display', serif;
+}
