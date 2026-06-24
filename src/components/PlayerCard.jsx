@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { usePlayer } from '../hooks/usePlayer'
 import { useDraftInfo } from '../hooks/useDraftInfo'
 
@@ -72,7 +72,7 @@ function StatBox({ label, value, trend }) {
 
   return (
     <div
-      className="flex flex-col items-center justify-center rounded px-1.5 py-1.5 min-w-[52px]"
+      className="flex flex-col items-center justify-center rounded px-1 py-1.5 flex-1 min-w-0"
       style={{ background: bg }}
     >
       <span className="text-[13px] font-semibold leading-tight" style={{ color: textColor, fontFamily: 'Inter, sans-serif' }}>
@@ -87,13 +87,39 @@ function StatBox({ label, value, trend }) {
 
 function CountStat({ label, value }) {
   return (
-    <div className="flex flex-col items-center min-w-[28px]">
-      <span className="text-[13px] font-medium text-gray-700" style={{ fontFamily: 'Inter, sans-serif' }}>
+    <div className="flex flex-col items-center flex-1 min-w-0">
+      <span className="text-[12px] font-medium text-gray-700" style={{ fontFamily: 'Inter, sans-serif' }}>
         {value ?? '—'}
       </span>
       <span className="text-[9px] uppercase text-gray-400" style={{ fontFamily: 'Inter, sans-serif' }}>
         {label}
       </span>
+    </div>
+  )
+}
+
+function LevelPills({ splits, activeSportId, onChange }) {
+  if (!splits || splits.length < 2) return null
+  const pills = [{ sportId: null, abbreviation: 'All' }, ...splits]
+  return (
+    <div className="flex gap-1">
+      {pills.map((p) => {
+        const active = p.sportId === activeSportId
+        return (
+          <button
+            key={p.sportId ?? 'all'}
+            onClick={() => onChange(p.sportId)}
+            className="text-[9px] px-1.5 py-0.5 rounded font-semibold transition-colors"
+            style={{
+              fontFamily: 'Inter, sans-serif',
+              background: active ? '#1F2937' : 'transparent',
+              color: active ? '#fff' : '#9CA3AF',
+            }}
+          >
+            {p.abbreviation}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -107,7 +133,7 @@ function trendFor(recentVal, seasonVal) {
   return 'neutral'
 }
 
-function HitterStats({ season, recent, label }) {
+function HitterStats({ season, recent, label, splits, activeSportId, onLevelChange }) {
   const isRecent = !!recent
 
   const stats = recent ?? season
@@ -118,20 +144,20 @@ function HitterStats({ season, recent, label }) {
   const slgTrend = isRecent ? trendFor(recent.slg, season?.slg) : 'neutral'
   const opsTrend = isRecent ? trendFor(recent.ops, season?.ops) : 'neutral'
   const bbTrend = isRecent ? trendFor(recent.bbPct, season?.bbPct) : 'neutral'
-  const kTrend = isRecent ? trendFor(recent.kPct, season?.kPct) : 'down_is_good'
-
-  // For K%, down is good
   const kTrendActual = isRecent
     ? parseFloat(recent.kPct) < parseFloat(season?.kPct) ? 'up' : parseFloat(recent.kPct) > parseFloat(season?.kPct) ? 'down' : 'neutral'
     : 'neutral'
 
   return (
     <div>
-      <p className="text-[9px] uppercase tracking-widest text-gray-400 mb-1.5" style={{ fontFamily: 'Inter, sans-serif' }}>
-        {label}
-        {isRecent && <span className="ml-1 text-gray-300">· vs season</span>}
-      </p>
-      <div className="flex gap-3 flex-wrap mb-2">
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="text-[9px] uppercase tracking-widest text-gray-400" style={{ fontFamily: 'Inter, sans-serif' }}>
+          {label}
+          {isRecent && <span className="ml-1 text-gray-300">· vs season</span>}
+        </p>
+        {!isRecent && <LevelPills splits={splits} activeSportId={activeSportId} onChange={onLevelChange} />}
+      </div>
+      <div className="flex mb-2">
         <CountStat label="G" value={stats.g} />
         <CountStat label="PA" value={stats.pa} />
         <CountStat label="H" value={stats.h} />
@@ -141,7 +167,7 @@ function HitterStats({ season, recent, label }) {
         <CountStat label="SB" value={stats.sb} />
         <CountStat label="SO" value={stats.so} />
       </div>
-      <div className="flex gap-1.5 flex-wrap">
+      <div className="flex gap-1">
         <StatBox label="AVG" value={stats.avg} trend={avgTrend} />
         <StatBox label="OBP" value={stats.obp} trend={obpTrend} />
         <StatBox label="SLG" value={stats.slg} trend={slgTrend} />
@@ -153,30 +179,40 @@ function HitterStats({ season, recent, label }) {
   )
 }
 
-function PitcherStats({ season, recent, label }) {
+function PitcherStats({ season, recent, label, splits, activeSportId, onLevelChange }) {
   const isRecent = !!recent
   const stats = recent ?? season
   if (!stats) return <p className="text-xs text-gray-400 py-2">No stats available</p>
 
-  const baaTrend = isRecent ? trendFor(season?.baa, recent.baa) : 'neutral' // lower baa = better
+  const eraTrend = isRecent ? trendFor(season?.era, recent.era) : 'neutral'
+  const whipTrend = isRecent ? trendFor(season?.whip, recent.whip) : 'neutral'
+  const baaTrend = isRecent ? trendFor(season?.baa, recent.baa) : 'neutral'
   const k9Trend = isRecent ? trendFor(recent.k9, season?.k9) : 'neutral'
-  const bb9Trend = isRecent ? trendFor(season?.bb9, recent.bb9) : 'neutral' // lower bb9 = better
-  const hr9Trend = isRecent ? trendFor(season?.hr9, recent.hr9) : 'neutral' // lower hr9 = better
+  const bb9Trend = isRecent ? trendFor(season?.bb9, recent.bb9) : 'neutral'
+  const hr9Trend = isRecent ? trendFor(season?.hr9, recent.hr9) : 'neutral'
 
   return (
     <div>
-      <p className="text-[9px] uppercase tracking-widest text-gray-400 mb-1.5" style={{ fontFamily: 'Inter, sans-serif' }}>
-        {label}
-        {isRecent && <span className="ml-1 text-gray-300">· vs season</span>}
-      </p>
-      <div className="flex gap-3 flex-wrap mb-2">
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="text-[9px] uppercase tracking-widest text-gray-400" style={{ fontFamily: 'Inter, sans-serif' }}>
+          {label}
+          {isRecent && <span className="ml-1 text-gray-300">· vs season</span>}
+        </p>
+        {!isRecent && <LevelPills splits={splits} activeSportId={activeSportId} onChange={onLevelChange} />}
+      </div>
+      <div className="flex mb-2">
+        <CountStat label="G" value={stats.g} />
         <CountStat label="GS" value={stats.gs} />
+        <CountStat label="W" value={stats.w} />
+        <CountStat label="L" value={stats.l} />
         <CountStat label="IP" value={stats.ip} />
         <CountStat label="H" value={stats.h} />
         <CountStat label="BB" value={stats.bb} />
         <CountStat label="SO" value={stats.so} />
       </div>
-      <div className="flex gap-1.5 flex-wrap">
+      <div className="flex gap-1">
+        <StatBox label="ERA" value={stats.era} trend={eraTrend} />
+        <StatBox label="WHIP" value={stats.whip} trend={whipTrend} />
         <StatBox label="BAA" value={stats.baa} trend={baaTrend} />
         <StatBox label="K/9" value={stats.k9} trend={k9Trend} />
         <StatBox label="BB/9" value={stats.bb9} trend={bb9Trend} />
@@ -209,6 +245,8 @@ function CardSkeleton() {
 export default function PlayerCard({ personId, type, onRemove }) {
   const { data, isLoading, isError } = usePlayer(personId, type)
   const { data: draftInfo } = useDraftInfo(personId, data?.bio?.draftYear)
+  const [activeSportId, setActiveSportId] = useState(null)
+  const handleLevelChange = useCallback((sportId) => setActiveSportId(sportId), [])
 
   if (isLoading) return <CardSkeleton />
 
@@ -228,10 +266,14 @@ export default function PlayerCard({ personId, type, onRemove }) {
     )
   }
 
-  const { bio, seasonStats, recentStats } = data
+  const { bio, seasonStats, seasonSplits, recentStats } = data
   const StatsComponent = type === 'pitcher' ? PitcherStats : HitterStats
   const recentLabel = type === 'pitcher' ? 'Last 14 Days' : 'Last 7 Days'
   const orgLogo = getOrgLogo(bio.parentOrgId)
+
+  const displaySeasonStats = activeSportId
+    ? (seasonSplits?.find((s) => s.sportId === activeSportId)?.stats ?? seasonStats)
+    : seasonStats
 
   const location = [bio.birthCity, bio.birthStateProvince || bio.birthCountry].filter(Boolean).join(', ')
 
@@ -297,7 +339,14 @@ export default function PlayerCard({ personId, type, onRemove }) {
       <div className="border-t my-3" style={{ borderColor: 'var(--color-border)' }} />
 
       {/* Full season stats */}
-      <StatsComponent season={seasonStats} recent={null} label="Full Season" />
+      <StatsComponent
+        season={displaySeasonStats}
+        recent={null}
+        label="Full Season"
+        splits={seasonSplits}
+        activeSportId={activeSportId}
+        onLevelChange={handleLevelChange}
+      />
 
       {recentStats && (
         <>

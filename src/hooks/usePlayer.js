@@ -27,7 +27,7 @@ function parseBio(data) {
     birthCountry: p.birthCountry ?? '',
     currentTeam: team?.name ?? '',
     currentTeamId: team?.id ?? null,
-    parentOrgId: team?.parentOrgId ?? null,
+    parentOrgId: team?.parentOrgId ?? team?.id ?? null,
     level: null, // populated after stats fetch
     draftYear: p.draftYear ?? null,
     draftRound: null, // not available from this endpoint; enrich separately if needed
@@ -35,10 +35,7 @@ function parseBio(data) {
   }
 }
 
-function parseSeasonStats(data, group) {
-  const splits = data?.stats?.[0]?.splits
-  if (!splits?.length) return null
-  const s = splits[0].stat
+function parseStatFields(s, group) {
   if (group === 'hitting') {
     return {
       g: s.gamesPlayed ?? 0,
@@ -58,21 +55,43 @@ function parseSeasonStats(data, group) {
       kPct: s.plateAppearances > 0 ? ((s.strikeOuts / s.plateAppearances) * 100).toFixed(1) : '0.0',
     }
   }
-  // pitching
   return {
-    gs: s.gamesStarted ?? 0,
     g: s.gamesPlayed ?? 0,
+    gs: s.gamesStarted ?? 0,
+    w: s.wins ?? 0,
+    l: s.losses ?? 0,
     ip: s.inningsPitched ?? '0.0',
     h: s.hits ?? 0,
     bb: s.baseOnBalls ?? 0,
     so: s.strikeOuts ?? 0,
     er: s.earnedRuns ?? 0,
-    baa: s.avg ?? '.---',
     era: s.era ?? '-.-',
+    whip: s.whip ?? '-.-',
+    baa: s.avg ?? '.---',
     k9: s.strikeoutsPer9Inn ?? '-.-',
     bb9: s.walksPer9Inn ?? '-.-',
     hr9: s.homeRunsPer9 ?? '-.-',
   }
+}
+
+function parseSeasonStats(data, group) {
+  const splits = data?.stats?.[0]?.splits
+  if (!splits?.length) return null
+  // sportId 21 ("Minors") is the combined total for players who've played at multiple levels
+  const combined = splits.find((sp) => sp.sport?.id === 21)
+  return parseStatFields((combined ?? splits[0]).stat, group)
+}
+
+function parseSeasonSplits(data, group) {
+  const splits = data?.stats?.[0]?.splits
+  if (!splits?.length) return []
+  return splits
+    .filter((sp) => sp.sport?.id !== 21) // exclude the combined row; "All" covers it
+    .map((sp) => ({
+      sportId: sp.sport?.id,
+      abbreviation: sp.sport?.abbreviation,
+      stats: parseStatFields(sp.stat, group),
+    }))
 }
 
 function getRecentSplits(data, group, days) {
@@ -112,6 +131,8 @@ function getRecentSplits(data, group, days) {
         }
         acc.g += 1
         acc.gs += st.gamesStarted ?? 0
+        acc.w += st.wins ?? 0
+        acc.l += st.losses ?? 0
         acc.outs += ipToOuts(st.inningsPitched ?? '0.0')
         acc.h += st.hits ?? 0
         acc.bb += st.baseOnBalls ?? 0
@@ -123,7 +144,7 @@ function getRecentSplits(data, group, days) {
     },
     group === 'hitting'
       ? { g: 0, pa: 0, h: 0, doubles: 0, hr: 0, rbi: 0, sb: 0, so: 0, bb: 0, ab: 0 }
-      : { g: 0, gs: 0, outs: 0, h: 0, bb: 0, so: 0, er: 0, hr: 0 },
+      : { g: 0, gs: 0, w: 0, l: 0, outs: 0, h: 0, bb: 0, so: 0, er: 0, hr: 0 },
   )
 
   if (group === 'hitting') {
@@ -160,12 +181,15 @@ function getRecentSplits(data, group, days) {
   return {
     g: agg.g,
     gs: agg.gs,
+    w: agg.w,
+    l: agg.l,
     ip,
     h: agg.h,
     bb: agg.bb,
     so: agg.so,
     era: ipDecimal > 0 ? ((agg.er * 9) / ipDecimal).toFixed(2) : '-.-',
-    baa: (agg.h + agg.bb) > 0 ? (agg.h / (agg.h + agg.bb + agg.so)).toFixed(3).replace(/^0/, '') : '.000',
+    whip: ipDecimal > 0 ? ((agg.h + agg.bb) / ipDecimal).toFixed(2) : '-.-',
+    baa: (agg.h + agg.bb + agg.so) > 0 ? (agg.h / (agg.h + agg.bb + agg.so)).toFixed(3).replace(/^0/, '') : '.000',
     k9: ipDecimal > 0 ? ((agg.so * 9) / ipDecimal).toFixed(1) : '-.-',
     bb9: ipDecimal > 0 ? ((agg.bb * 9) / ipDecimal).toFixed(1) : '-.-',
     hr9: ipDecimal > 0 ? ((agg.hr * 9) / ipDecimal).toFixed(1) : '-.-',
@@ -195,9 +219,10 @@ export function usePlayer(personId, type) {
       if (bio) bio.level = levelAbbr
 
       const seasonStats = parseSeasonStats(seasonData, group)
+      const seasonSplits = parseSeasonSplits(seasonData, group)
       const recentStats = getRecentSplits(gameLogData, group, recentDays)
 
-      return { bio, seasonStats, recentStats }
+      return { bio, seasonStats, seasonSplits, recentStats }
     },
     enabled: !!personId,
   })
